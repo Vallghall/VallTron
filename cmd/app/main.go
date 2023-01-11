@@ -1,15 +1,17 @@
 package main
 
 import (
-	"github.com/Vallghall/VallTron/pkg/utils"
+	"github.com/Vallghall/VallTron/internal/handler"
 	"github.com/bwmarrin/discordgo"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
 )
 
 var (
-	token string
+	token   string
+	pattern string = `^\$vt\s\w+$`
 )
 
 func init() {
@@ -17,43 +19,34 @@ func init() {
 }
 
 func main() {
-	defer utils.Logger.Sync()
 	if token == "" {
-		utils.Sugar.Fatalln("token is not provided")
+		log.Fatalln("token is not provided")
 	}
 
 	dg, err := discordgo.New(token)
 	if err != nil {
-		utils.Sugar.Fatalf("Discord session creation failure: %v\n", err)
+		log.Fatalf("Discord session creation failure: %v\n", err)
 	}
 
-	dg.AddHandler(pingPong)
+	h, err := handler.New(pattern)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	dg.AddHandler(h.Handle)
 
 	dg.Identify.Intents = discordgo.IntentsGuildMessages
 
 	err = dg.Open()
 	if err != nil {
-		utils.Sugar.Fatalf("ws connection error: %v\n", err)
+		log.Fatalf("ws connection error: %v\n", err)
 	}
 
-	utils.Sugar.Infoln("Bot started")
+	log.Println("Bot started")
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
 
 	_ = dg.Close()
-}
-
-func pingPong(s *discordgo.Session, m *discordgo.MessageCreate) {
-	if m.Author.ID == s.State.User.ID {
-		return
-	}
-
-	if m.Content == "ping" {
-		_, err := s.ChannelMessageSend(m.ChannelID, "Pong!")
-		if err != nil {
-			utils.Sugar.Errorf("message send error: %v\n", err)
-		}
-	}
 }
